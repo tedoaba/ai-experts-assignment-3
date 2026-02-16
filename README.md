@@ -1,65 +1,65 @@
-# AI Experts Assignment (Python)
+# AI Experts Assignment Solution
 
-This assignment evaluates your ability to:
+This repository contains the solution for the AI Experts Python assignment. It demonstrates a reliable setup using Docker, pinned dependencies, and a fix for a subtle logic bug in the HTTP client.
 
-- set up a small Python project to run reliably (locally + in Docker),
-- pin dependencies for reproducible installs,
-- write focused tests to reproduce a bug,
-- implement a minimal, reviewable fix.
+## Solution Overview
 
-## What you will do
+### 1. Robust Containerization (Dockerfile)
 
-### 1) Dockerfile (required)
+To ensure the test suite runs in a consistent, non-interactive CI-style environment, I implemented a `Dockerfile`. usage of a slim Python image minimizes the footprint while ensuring all necessary tools are available.
 
-Create a `Dockerfile` so the project can run the test suite in a non-interactive, CI-style environment.
+- **Consistency**: It installs the dependencies defined in `requirements.txt` in a clean environment.
+- **Automation**: The container is configured to automatically execute the full test suite using `pytest -v` upon startup, providing immediate feedback on code health.
 
-Requirements:
+### 2. Reproducible Environment (requirements.txt)
 
-- requirements.txt exists and is used during build (pip install -r requirements.txt)
-- pytest must be included/pinned in requirements.txt
-- The image must run tests by default (use: `CMD ["python", "-m", "pytest", "-v"]`).
-- The build must install dependencies from `requirements.txt`.
+To prevent "it works on my machine" issues, I created a `requirements.txt` file that strictly pins all necessary libraries—`requests`, `python-dateutil`, and `pytest`—to specific versions. This guarantees that the development and testing environments satisfy the exact same dependency constraints.
 
-### 2) requirements.txt (required)
+### 3. Verification & Testing Steps
 
-Create a `requirements.txt` with pinned versions, using this format:
+I have updated the documentation to include clear steps for verification.
 
-- `package==x.y.z`
+**Running Tests Locally:**
+To verify the fix on your machine:
 
-### 3) README updates (required)
+1.  Install the pinned dependencies:
+    ```bash
+    pip install -r requirements.txt
+    ```
+2.  Execute the test suite:
+    ```bash
+    python -m pytest -v
+    ```
 
-Update this README to include:
+**Running Tests via Docker:**
+To verify the fix in an isolated environment:
 
-- how to run the tests locally,
-- how to build and run tests with Docker.
+1.  Build the Docker image:
+    ```bash
+    docker build -t app-tests .
+    ```
+2.  Run the validation container:
+    ```bash
+    docker run --rm app-tests
+    ```
 
-### 4) Find + fix a bug (required)
+### 4. The Bug Fix: Token Refresh Logic
 
-There is a bug somewhere in this repository.
+**The Problem:**
+I identified a critical bug in the `http_client.py` module. The `Client` class failed to refresh the OAuth2 token when the token was provided as a raw dictionary (e.g., `{'access_token': '...', 'expires_at': 0}`) instead of a structured `OAuth2Token` object. The original conditional logic simply skipped the refresh step for dictionaries because they didn't match the expected class type, leading to the use of invalid or stale tokens.
 
-Your tasks:
+**The Solution:**
+I corrected the conditional check in the `request` method to be more robust.
 
-- Identify the bug through reading code and/or running tests.
-- Write tests that reproduce the bug (tests should fail on the current code).
-- Apply the smallest possible fix to make the tests pass.
-- Keep the change minimal and reviewable (no refactors).
+- **Original Logic**: Only refreshed if the token was `None` or an _expired_ `OAuth2Token` object.
+- **New Logic**: Now forces a refresh if the token is _anything other than_ a valid `OAuth2Token` object (handling `None`, `dict`, etc.) OR if the valid object is expired.
 
-## Constraints
+This minimal change ensures that the client automatically recovers from invalid states by fetching a fresh token, satisfying the failing test case (`test_api_request_refreshes_when_token_is_dict`).
 
-- Keep changes minimal and reviewable.
-- Do not refactor unrelated code.
-- Do not introduce extra tooling unless required.
-- You may add tests and the smallest code change needed to fix the bug.
+### 5. Design Considerations & Limitations
 
-### 5) EXPLANATION.md (required)
+**Root Cause:**
+The bug stemmed from an overly specific type check (`isinstance`) that didn't account for other "truthy" types like dictionaries. Python's dynamic nature requires careful handling of such types when defining control flow.
 
-Create `EXPLANATION.md` (max 250 words) containing:
-
-- **What was the bug?**
-- **Why did it happen?**
-- **Why does your fix solve it?**
-- **One realistic case / edge case your tests still don’t cover**
-
-## Submission
-
-- Submit a public GitHub repository URL containing your solution to the Google form link provided.
+**Remaining Edge Case:**
+While the fix addresses the immediate crash/failure, the system does not yet handle race conditions. If a valid token expires strictly _after_ the check but _before_ the request reaches the server, the API call will still fail with a 401 error. A production-grade solution would likely implement a retry mechanism that catches 401 responses and attempts one token refresh before failing.
